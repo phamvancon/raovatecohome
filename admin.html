@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ECOHOME - Admin Panel</title>
+
+  <!-- Tailwind CDN (dev/demo). Ở production nên build CSS riêng) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <style>
+    body { background: #f3f4f6; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    .container { max-width: 1200px; margin: 22px auto; padding: 16px; }
+    .panel { background: #fff; border-radius: 12px; box-shadow: 0 6px 20px rgba(2,6,23,0.06); }
+    header.admin-top { display:flex; gap:12px; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid #eef2f7; }
+    .logo { display:flex; gap:12px; align-items:center; }
+    .logo .brand { font-weight:700; color:#059669; font-size:18px; }
+    #admin-root { padding: 20px; }
+    .nav-btn { padding:8px 12px; border-radius:8px; border:1px solid transparent; cursor:pointer; }
+    .nav-btn.active { background:#10b981; color:#fff; }
+    .admin-content { padding:18px; }
+    /* minimal buttons */
+    .btn { background:#10b981; color:#fff; padding:8px 12px; border-radius:8px; border:none; cursor:pointer; }
+    .btn-outline { background:#fff; border:1px solid #e5e7eb; padding:8px 12px; border-radius:8px; cursor:pointer; }
+    .btn-danger { background:#ef4444; color:#fff; padding:8px 12px; border-radius:8px; border:none; cursor:pointer; }
+    .admin-toast.success { background:#059669; color:white; padding:8px 12px; border-radius:8px; }
+    .admin-toast.error { background:#ef4444; color:white; padding:8px 12px; border-radius:8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="panel">
+      <header class="admin-top">
+        <div class="logo">
+          <div style="width:44px;height:44px;border-radius:10px;background:#10b981;display:flex;align-items:center;justify-content:center;color:#fff">
+            <i class="fas fa-leaf"></i>
+          </div>
+          <div>
+            <div class="brand">ECOHOME — Admin</div>
+            <div class="text-xs text-gray-500">Quản lý hệ thống rao vặt, duyệt tin, quản lý đơn VIP, bank/QR</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center">
+          <div id="signed-in-info" class="text-sm text-gray-600 hidden"></div>
+          <button id="btn-signout" class="btn-outline hidden" onclick="Eco.auth.signOut()">Đăng xuất</button>
+        </div>
+      </header>
+
+      <!-- Admin UI Root -->
+      <div id="admin-root"></div>
+    </div>
+  </div>
+
+  <!-- Firebase (compat libs) - đảm bảo phiên bản tương thích với common.js -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+
+  <!-- Import admin module (common.js) -->
+  <!--
+    LƯU Ý:
+    - Đảm bảo file common.js đã được thay thế bằng phiên bản admin module (đã gửi trước đó).
+    - Nếu muốn nhúng trực tiếp thay vì file riêng, hãy dán nội dung common.js vào thẻ <script> dưới đây.
+  -->
+  <script src="./common.js"></script>
+
+  <script>
+    // Tùy chỉnh (nếu muốn) trước khi init
+    // Ví dụ: thêm email admin khác
+    // Eco.adminEmails = ['phamvanconcn@gmail.com', 'admin2@domain.com'];
+
+    // Init admin module (common.js auto-init nếu window.load gọi). Nhưng gọi an toàn ở đây:
+    (function initAdminUI() {
+      // Wait for firebase and Eco.Admin to be ready
+      const waitFor = () => {
+        if (window.Eco && window.Eco.Admin && typeof Eco.Admin.init === 'function') {
+          // init (can pass options)
+          Eco.Admin.init({ adminEmails: ['phamvanconcn@gmail.com'] });
+          // show basic signed-in info handler
+          Eco.auth.onAuthStateChanged(user => {
+            const info = document.getElementById('signed-in-info');
+            const btn = document.getElementById('btn-signout');
+            if (user) {
+              info.textContent = user.email || 'Đã đăng nhập';
+              info.classList.remove('hidden');
+              btn.classList.remove('hidden');
+            } else {
+              info.classList.add('hidden');
+              btn.classList.add('hidden');
+            }
+          });
+        } else {
+          setTimeout(waitFor, 200);
+        }
+      };
+      waitFor();
+    })();
+  </script>
+
+  <!-- Optional: small instructions in footer -->
+  <div style="max-width:1200px;margin:16px auto;text-align:center;color:#6b7280;font-size:13px">
+    <div>Ghi chú: 1) Đăng nhập bằng Google (admin) để truy cập. 2) Thêm domain vào Authorized domains trong Firebase Console nếu gặp lỗi OAuth.</div>
+  </div>
+</body>
+</html>
