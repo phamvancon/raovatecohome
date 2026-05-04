@@ -3,490 +3,224 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>EcoHome Nhơn Bình - Rao Vặt</title>
+  <title>EcoHome Nhơn Bình - Chợ Rao Vặt</title>
 
+  <!-- Thư viện hỗ trợ -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
-
-  <!-- Firebase compat (giữ tương thích với code cũ) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 
+  <script>
+    /* ==========================================
+       GỘP LOGIC COMMON.JS (ECOHOME) VÀO ĐÂY
+       ========================================== */
+    const firebaseConfig = {
+      apiKey: "AIzaSyCxS6oT6h9XTc-rB3X1gSnlfvNfshy7Mxs",
+      authDomain: "rao-vat-ecohome-3d11d.firebaseapp.com",
+      projectId: "rao-vat-ecohome-3d11d",
+      storageBucket: "rao-vat-ecohome-3d11d.firebasestorage.app",
+      messagingSenderId: "610650533071",
+      appId: "1:610650533071:web:522508a572b17da9ad9bba"
+    };
+
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+
+    window.Eco = {
+      auth: firebase.auth(),
+      db: firebase.firestore(),
+      storage: firebase.storage(),
+      adminEmails: ['phamvanconcn@gmail.com'],
+      checkIsAdmin: async function(user) { 
+        return !!user && this.adminEmails.includes(user.email); 
+      },
+      showToast: function(msg, type='info') {
+        const t = document.getElementById('toast');
+        if (t) { 
+          t.innerText = msg; 
+          t.style.backgroundColor = type === 'error' ? '#ef4444' : '#111827'; 
+          t.classList.remove('hidden'); 
+          setTimeout(()=> t.classList.add('hidden'), 3500); 
+        }
+      }
+    };
+
+    // Mapping global cho các nút bấm onclick cũ
+    window.loginGoogleAdmin = async function() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      try {
+        const res = await window.Eco.auth.signInWithPopup(provider);
+        const isAdmin = await window.Eco.checkIsAdmin(res.user);
+        if (isAdmin) { 
+          window.Eco.showToast('Chào Admin!'); 
+          location.reload(); 
+        } else { 
+          window.Eco.showToast('Bạn không phải Admin', 'error'); 
+          window.Eco.auth.signOut(); 
+        }
+      } catch (e) { window.Eco.showToast('Lỗi đăng nhập', 'error'); }
+    };
+    
+    window.verifyAdminPassword = function() { return false; }; // Placeholder
+  </script>
+
   <style>
-    body { background:#f8fafc; font-family: Inter, system-ui, sans-serif; margin:0; }
-    .modal { position: fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:60; background:rgba(0,0,0,0.45); }
-    .modal.show { display:flex; }
-    .btn { padding:8px 12px; border-radius:8px; cursor:pointer; }
-    .btn-primary { background:#2d8a3c; color:#fff; }
-    .card { background:#fff; border-radius:10px; padding:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+    :root { --eco-green: #2d8a3c; --eco-blue: #0076a3; --bg: #f8fafc; }
+    body { background: var(--bg); font-family: 'Segoe UI', sans-serif; }
+    .btn-primary { background: var(--eco-green); color: #fff; font-weight: 700; }
+    .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 60; background: rgba(0,0,0,0.5); }
+    .modal.active { display: flex; }
+    .vip-card { background: #fff; border-radius: 10px; padding: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); min-width: 160px; flex-shrink: 0; }
+    .filter-chip { padding:6px 12px; border-radius:8px; border:1px solid #ddd; cursor:pointer; background: #fff; white-space: nowrap; }
+    .filter-chip.active { background: var(--eco-green); color: #fff; border-color: transparent; }
   </style>
 </head>
 <body>
 
-<header class="bg-white shadow p-4 flex items-center justify-between">
-  <div class="flex items-center gap-3">
-    <div class="w-10 h-10 bg-green-600 text-white rounded flex items-center justify-center font-bold">E</div>
-    <h1 class="font-bold text-lg">ECOHOME Nhơn Bình</h1>
-  </div>
-  <div class="flex items-center gap-3">
-    <button id="open-login" class="btn btn-primary">Đăng nhập / Đăng ký</button>
-    <button id="open-post" class="btn">+ Đăng tin</button>
+<header class="bg-white shadow sticky top-0 z-50 p-3">
+  <div class="max-w-6xl mx-auto flex items-center justify-between gap-4">
+    <div class="flex items-center gap-2 cursor-pointer" onclick="location.reload()">
+        <img src="https://cdn.abacus.ai/images/08379504-c82c-404b-89e1-34ac87a1e264.png" class="h-10" alt="Logo">
+        <span class="font-bold text-slate-700 hidden sm:inline">EcoHome Nhơn Bình</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <div id="auth-info" class="text-sm cursor-pointer hover:underline" onclick="handleAuthClick()">Đăng nhập</div>
+      <button class="btn-primary px-4 py-2 rounded-full text-sm" onclick="openPostModal()"><i class="fas fa-plus mr-1"></i> Đăng tin</button>
+    </div>
   </div>
 </header>
 
-<main class="max-w-5xl mx-auto p-4">
-  <div class="card mb-4">
-    <div class="flex justify-between items-center">
-      <input id="search" placeholder="Tìm kiếm..." class="border rounded p-2 flex-1 mr-3" />
-      <button id="open-vip" class="btn btn-primary">Mua VIP</button>
+<main class="max-w-6xl mx-auto p-4">
+  <!-- Gói VIP -->
+  <section class="mb-6 p-4 bg-white rounded-lg shadow">
+    <h3 class="font-bold mb-3 text-lg">Gói VIP Ưu Tiên</h3>
+    <div id="vip-list" class="flex gap-4 overflow-x-auto pb-2">
+      <!-- Injected by JS -->
     </div>
-  </div>
+  </section>
 
-  <div id="feed" class="space-y-4">
-    <div class="text-center text-gray-400 py-10">Đang tải...</div>
+  <!-- Bộ lọc -->
+  <section class="mb-4 flex gap-2 overflow-x-auto pb-2">
+    <div class="filter-chip active" onclick="setCat('', this)">Tất cả</div>
+    <div class="filter-chip" onclick="setCat('Block 1', this)">Block 1</div>
+    <div class="filter-chip" onclick="setCat('Block 5', this)">Block 5</div>
+    <div class="filter-chip" onclick="setCat('Do dung', this)">Đồ dùng</div>
+  </section>
+
+  <!-- Lưới tin đăng -->
+  <div id="listing-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+    <!-- Injected by JS -->
   </div>
 </main>
 
-<!-- Toast -->
-<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded hidden"></div>
-
-<!-- Login Modal -->
-<div id="login-modal" class="modal">
-  <div class="bg-white w-full max-w-sm rounded p-6 relative">
-    <button onclick="hideModal('login-modal')" class="absolute right-3 top-3 text-gray-500">&times;</button>
-    <h3 class="font-bold mb-3">Đăng nhập / Đăng ký</h3>
-    <div class="space-y-3">
-      <button id="google-login-btn" class="w-full border py-2 rounded flex items-center justify-center gap-2">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" width="18" /> Đăng nhập bằng Google
-      </button>
-      <div class="text-center text-sm text-gray-500">Hoặc</div>
-      <input id="email" placeholder="Email" class="w-full p-2 border rounded" />
-      <input id="password" placeholder="Mật khẩu" type="password" class="w-full p-2 border rounded" />
-      <div class="flex gap-2">
-        <button id="email-login" class="btn btn-primary flex-1">Đăng nhập</button>
-        <button id="email-register" class="btn border flex-1">Đăng ký</button>
-      </div>
-      <div id="iframe-fallback" class="text-xs text-red-500 hidden">
-        Lưu ý: Nếu đăng nhập không hoạt động khi trang được nhúng (Google Sites), bấm "Mở trang ngoài" để đăng nhập trong tab mới.
-        <div class="mt-2">
-          <button onclick="window.open(location.href,'_blank')" class="btn border">Mở trang ngoài</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Post Modal -->
+<!-- Modal Đăng tin -->
 <div id="post-modal" class="modal">
-  <div class="bg-white w-full max-w-xl rounded p-6 relative">
-    <button onclick="hideModal('post-modal')" class="absolute right-3 top-3 text-gray-500">&times;</button>
-    <h3 class="font-bold mb-3">Đăng tin</h3>
-    <div class="space-y-2">
-      <input id="post-title" placeholder="Tiêu đề" class="w-full p-2 border rounded" />
-      <input id="post-price" placeholder="Giá (vnđ)" type="number" class="w-full p-2 border rounded" />
-      <input id="post-phone" placeholder="Số điện thoại" class="w-full p-2 border rounded" />
-      <textarea id="post-desc" rows="4" placeholder="Mô tả" class="w-full p-2 border rounded"></textarea>
-      <div>
-        <label class="text-sm">Hình (tối đa 6)</label>
-        <input id="post-images" type="file" accept="image/*" multiple />
-        <div id="preview" class="flex gap-2 mt-2"></div>
-      </div>
-      <div>
-        <label>Chọn gói</label>
-        <select id="post-plan" class="w-full p-2 border rounded">
-          <option value="free">Miễn phí (7 ngày)</option>
-          <option value="vip">VIP - 50,000 vnđ (30 ngày)</option>
-          <option value="vips">VIPS - 100,000 vnđ (90 ngày)</option>
-          <option value="vipss">VIPSS - 150,000 vnđ (120 ngày)</option>
-          <option value="vipsss">VIPSSS - 500,000 vnđ (Vĩnh viễn)</option>
-        </select>
-      </div>
-      <div class="flex gap-2">
-        <button id="submit-post" class="btn btn-primary">Đăng tin</button>
-        <button onclick="hideModal('post-modal')" class="btn border">Hủy</button>
-      </div>
+  <div class="bg-white p-6 rounded-lg w-full max-w-md mx-4 overflow-y-auto max-h-[90vh]">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-lg">Đăng tin rao vặt</h3>
+        <button class="text-2xl" onclick="closeModal('post-modal')">&times;</button>
     </div>
+    <input id="p-title" placeholder="Tiêu đề" class="w-full border p-2 mb-2 rounded">
+    <input id="p-price" type="number" placeholder="Giá (VND)" class="w-full border p-2 mb-4 rounded">
+    <textarea id="p-desc" placeholder="Mô tả chi tiết..." class="w-full border p-2 mb-4 rounded" rows="3"></textarea>
+    <button class="btn-primary w-full py-3 rounded-lg" onclick="uploadPost()">Đăng ngay</button>
   </div>
 </div>
 
-<!-- VIP Modal -->
-<div id="vip-modal" class="modal">
-  <div class="bg-white w-full max-w-md rounded p-6 relative">
-    <button onclick="hideModal('vip-modal')" class="absolute right-3 top-3 text-gray-500">&times;</button>
-    <h3 class="font-bold mb-3">Mua gói VIP</h3>
-    <div class="space-y-2">
-      <div class="grid grid-cols-2 gap-2">
-        <button class="btn border" onclick="createInvoice('vip')">VIP - 50,000 vnđ (30 ngày)</button>
-        <button class="btn border" onclick="createInvoice('vips')">VIPS - 100,000 vnđ (90 ngày)</button>
-      </div>
-      <div class="grid grid-cols-2 gap-2">
-        <button class="btn border" onclick="createInvoice('vipss')">VIPSS - 150,000 vnđ (120 ngày)</button>
-        <button class="btn border" onclick="createInvoice('vipsss')">VIPSSS - 500,000 vnđ (Vĩnh viễn)</button>
-      </div>
-      <div class="text-sm text-gray-600 mt-2">
-        Sau khi tạo hóa đơn, vui lòng chuyển khoản theo hướng dẫn. Admin sẽ kiểm tra và duyệt thủ công.
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Invoice Modal -->
-<div id="invoice-modal" class="modal">
-  <div class="bg-white w-full max-w-lg rounded p-6 relative">
-    <button onclick="hideModal('invoice-modal')" class="absolute right-3 top-3 text-gray-500">&times;</button>
-    <h3 class="font-bold mb-3">Hóa đơn</h3>
-    <div id="invoice-content" class="text-sm"></div>
-    <div class="mt-4 flex gap-2">
-      <button onclick="copyInvoice()" class="btn btn-primary">Sao chép thông tin</button>
-      <button onclick="hideModal('invoice-modal')" class="btn border">Đóng</button>
-    </div>
-  </div>
-</div>
-
-<!-- Admin Panel (side simple) -->
-<div id="admin-panel" style="position:fixed; right:12px; bottom:12px; z-index:80;">
-  <div id="admin-button" class="btn btn-primary hidden">Admin</div>
-  <div id="admin-ui" class="card hidden mt-2 max-w-sm" style="width:360px; max-height:60vh; overflow:auto;">
-    <h4 class="font-bold mb-2">Hóa đơn chờ</h4>
-    <div id="invoices-list" class="space-y-2"></div>
-  </div>
-</div>
+<div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 text-white px-6 py-3 rounded-full hidden z-[100] shadow-xl text-center"></div>
 
 <script>
-/* ===================== CONFIG ===================== */
-/* NOTE: nếu bạn muốn thay config khác, thay ở đây */
-const firebaseConfig = {
-  apiKey: "AIzaSyCxS6oT6h9XTc-rB3X1gSnlfvNfshy7Mxs",
-  authDomain: "rao-vat-ecohome-3d11d.firebaseapp.com",
-  projectId: "rao-vat-ecohome-3d11d",
-  // SỬA: storageBucket phải là *.appspot.com
-  storageBucket: "rao-vat-ecohome-3d11d.appspot.com",
-  messagingSenderId: "610650533071",
-  appId: "1:610650533071:web:522508a572b17da9ad9bba"
-};
-
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
-const auth = firebase.auth();
-const db = firebase.firestore();
-const storage = firebase.storage();
-
-/* ============== Globals & Settings ============== */
-const BANK_INFO = { account: '3659999999', bank: 'MBV', notePrefix: 'ECOHOME-PAY' };
-const ADMIN_EMAILS = ['phamvanconcn@gmail.com']; // sửa/ bổ sung email admin tại đây
-let currentUser = null;
-
-/* VIP packages (prices and days) */
-const VIP_PACKAGES = {
-  vip:  { price: 50000,  days: 30,  label: 'VIP (30 ngày)' },
-  vips: { price: 100000, days: 90,  label: 'VIPS (90 ngày)' },
-  vipss:{ price: 150000, days: 120, label: 'VIPSS (120 ngày)' },
-  vipsss:{price: 500000, days: 0,   label: 'VIPSSS (Vĩnh viễn)' }
-};
-
-/* ================== UI helpers =================== */
-function showToast(msg, time=3000) {
-  const t = document.getElementById('toast');
-  t.innerText = msg; t.classList.remove('hidden');
-  setTimeout(()=> t.classList.add('hidden'), time);
-}
-function showModal(id){ document.getElementById(id).classList.add('show'); document.getElementById(id).style.display='flex'; }
-function hideModal(id){ document.getElementById(id).classList.remove('show'); document.getElementById(id).style.display='none'; }
-
-/* ============= Auth handling ================= */
-auth.onAuthStateChanged(async u => {
-  currentUser = u;
-  if (u) {
-    showToast('Xin chào ' + (u.displayName || u.email), 2000);
-    // ensure user doc exists
-    try {
-      await db.collection('users').doc(u.uid).set({
-        uid: u.uid,
-        name: u.displayName || '',
-        email: u.email || '',
-        avatar: u.photoURL || ''
-      }, { merge: true });
-    } catch(e) { console.warn('ensure user doc err', e); }
-    // if admin email show admin UI
-    if (ADMIN_EMAILS.includes(u.email)) {
-      document.getElementById('admin-button').classList.remove('hidden');
-    }
-  } else {
-    document.getElementById('admin-button').classList.add('hidden');
-  }
-});
-
-/* Use redirect (not popup) for Google sign-in to be iframe-friendly */
-document.getElementById('google-login-btn').addEventListener('click', () => {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithRedirect(provider).catch(err => {
-    console.error('signInWithRedirect err', err);
-    showToast('Lỗi khi bắt đầu đăng nhập: ' + err.message, 4000);
-  });
-});
-
-/* Handle redirect result on page load */
-auth.getRedirectResult().then(result => {
-  if (result && result.user) {
-    showToast('Đăng nhập thành công', 1500);
-    // if admin, enable admin panel
-    if (ADMIN_EMAILS.includes(result.user.email)) document.getElementById('admin-button').classList.remove('hidden');
-  }
-}).catch(err => {
-  console.warn('getRedirectResult err', err);
-});
-
-/* Email/password login & register */
-document.getElementById('email-login').addEventListener('click', async () => {
-  const email = document.getElementById('email').value.trim();
-  const pass = document.getElementById('password').value;
-  if (!email || !pass) return showToast('Nhập email & mật khẩu');
-  try {
-    await auth.signInWithEmailAndPassword(email, pass);
-    hideModal('login-modal');
-  } catch(e) {
-    showToast('Lỗi đăng nhập: ' + e.message, 4000);
-  }
-});
-document.getElementById('email-register').addEventListener('click', async () => {
-  const email = document.getElementById('email').value.trim();
-  const pass = document.getElementById('password').value;
-  if (!email || !pass) return showToast('Nhập email & mật khẩu');
-  try {
-    const res = await auth.createUserWithEmailAndPassword(email, pass);
-    await res.user.updateProfile({ displayName: email.split('@')[0] });
-    await db.collection('users').doc(res.user.uid).set({ uid: res.user.uid, name: res.user.displayName, email }, { merge: true });
-    hideModal('login-modal');
-    showToast('Đăng ký thành công');
-  } catch(e) { showToast('Lỗi đăng ký: ' + e.message, 4000); }
-});
-
-/* If page is in iframe, show fallback hint inside login modal */
-function detectIframeFallback() {
-  if (window.top !== window.self) {
-    document.getElementById('iframe-fallback').classList.remove('hidden');
-  }
-}
-
-/* ============= Posts & Upload ================ */
-document.getElementById('open-login').addEventListener('click', ()=> showModal('login-modal'));
-document.getElementById('open-post').addEventListener('click', ()=> {
-  if (!currentUser) { showModal('login-modal'); return; }
-  showModal('post-modal');
-});
-document.getElementById('open-vip').addEventListener('click', ()=> {
-  if(!currentUser) { showModal('login-modal'); return; }
-  showModal('vip-modal');
-});
-
-const previewEl = document.getElementById('preview');
-document.getElementById('post-images').addEventListener('change', (e)=> {
-  previewEl.innerHTML = '';
-  Array.from(e.target.files).slice(0,6).forEach(f=>{
-    const url = URL.createObjectURL(f);
-    const img = document.createElement('img'); img.src = url; img.className = 'w-20 h-20 object-cover rounded';
-    previewEl.appendChild(img);
-  });
-});
-
-async function uploadFileWithTimeout(file, ms=20000) {
-  return new Promise((resolve, reject) => {
-    try {
-      const ref = storage.ref(`posts/${Date.now()}_${file.name}`);
-      const task = ref.put(file);
-      const timer = setTimeout(()=> reject(new Error('Upload timeout')), ms);
-      task.on('state_changed', null, err => {
-        clearTimeout(timer); reject(err);
-      }, async ()=> {
-        clearTimeout(timer);
-        const url = await ref.getDownloadURL();
-        resolve(url);
-      });
-    } catch(e) { reject(e); }
-  });
-}
-
-document.getElementById('submit-post').addEventListener('click', async () => {
-  if (!currentUser) { showModal('login-modal'); return; }
-  const title = document.getElementById('post-title').value.trim();
-  const price = Number(document.getElementById('post-price').value || 0);
-  const phone = document.getElementById('post-phone').value.trim();
-  const desc = document.getElementById('post-desc').value.trim();
-  const plan = document.getElementById('post-plan').value || 'free';
-  if (!title || !price || !phone) return showToast('Vui lòng nhập tiêu đề, giá và số điện thoại');
-  const files = document.getElementById('post-images').files;
-  const imageUrls = [];
-  for (let i=0;i<Math.min(6, files.length); i++) {
-    try {
-      const url = await uploadFileWithTimeout(files[i], 25000);
-      imageUrls.push(url);
-    } catch(e) {
-      console.warn('upload fail', e);
-    }
-  }
-
-  // expiry for post
-  const now = Date.now();
-  let expiry = null;
-  if (plan === 'free') expiry = new Date(now + 7*24*3600*1000);
-  else if (plan === 'vip') expiry = new Date(now + 30*24*3600*1000);
-  else if (plan === 'vips') expiry = new Date(now + 90*24*3600*1000);
-  else if (plan === 'vipss') expiry = new Date(now + 120*24*3600*1000);
-  else expiry = null; // vipsss
-
-  try {
-    await db.collection('posts').add({
-      title, price, phone, desc, images: imageUrls, uid: currentUser.uid,
-      userName: currentUser.displayName || currentUser.email,
-      userAvatar: currentUser.photoURL || '',
-      plan, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      expiryDate: expiry ? firebase.firestore.Timestamp.fromDate(expiry) : null
-    });
-    showToast('Đăng tin thành công');
-    hideModal('post-modal');
-    // clear form
-    ['post-title','post-price','post-phone','post-desc'].forEach(id=> document.getElementById(id).value='');
-    document.getElementById('post-images').value='';
-    previewEl.innerHTML='';
-  } catch(e) {
-    console.error('create post err', e);
-    showToast('Lỗi đăng tin: ' + e.message, 4000);
-  }
-});
-
-/* =========== Feed rendering (simple) ========= */
-db.collection('posts').orderBy('createdAt','desc').onSnapshot(snap=>{
-  const feed = document.getElementById('feed');
-  const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  if (!items.length) { feed.innerHTML = '<div class="text-center py-10 text-gray-400">Chưa có tin đăng</div>'; return; }
-  feed.innerHTML = items.map(p => {
-    const img = (p.images && p.images[0]) ? `<img src="${p.images[0]}" class="w-full max-h-48 object-cover rounded">` : `<div class="w-full h-48 bg-gray-100 rounded flex items-center justify-center text-gray-400"><i class="fas fa-image text-3xl"></i></div>`;
-    const vip = (p.plan && p.plan !== 'free') ? `<span class="text-xs bg-yellow-200 px-2 py-1 rounded">${p.plan.toUpperCase()}</span>` : '';
-    const priceText = (p.price || 0).toLocaleString('vi-VN') + ' đ';
-    return `<div class="card overflow-hidden">${img}<div class="p-3"><div class="flex justify-between"><h3 class="font-bold">${p.title}</h3>${vip}</div><div class="text-green-600 font-bold">${priceText}</div><div class="text-sm text-gray-500">${p.location || ''}</div><div class="flex justify-between items-center mt-3"><div class="flex items-center gap-2"><img src="${p.userAvatar||'https://www.gravatar.com/avatar/000?d=mp'}" class="w-7 h-7 rounded-full" /> <span>${p.userName}</span></div><a href="tel:${p.phone}" class="btn btn-primary">Gọi</a></div></div></div>`;
-  }).join('');
-});
-
-/* ============ Invoice / VIP purchase ============ */
-function genInvoiceId() { return 'INV-' + Date.now().toString(36).toUpperCase().slice(0,10); }
-
-async function createInvoice(pkgKey) {
-  if (!currentUser) { showModal('login-modal'); return; }
-  const pkg = VIP_PACKAGES[pkgKey];
-  if (!pkg) return showToast('Gói không hợp lệ');
-  const invoice = {
-    invoiceId: genInvoiceId(),
-    uid: currentUser.uid,
-    userName: currentUser.displayName || currentUser.email,
-    packageKey: pkgKey,
-    amount: pkg.price,
-    status: 'pending',
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  let currentUser = null;
+  const VIP_PACKAGES = {
+    v1: { price: 50000, label: 'VIP (60 ngày)' },
+    v2: { price: 100000, label: 'VIPS (90 ngày)' },
+    v3: { price: 150000, label: 'VIPSS (120 ngày)' }
   };
-  try {
-    await db.collection('invoices').add(invoice);
-    showInvoiceModal(invoice);
-    hideModal('vip-modal');
-  } catch(e) { console.error('create invoice err', e); showToast('Không tạo được hóa đơn: ' + e.message, 4000); }
-}
 
-function showInvoiceModal(inv) {
-  const content = document.getElementById('invoice-content');
-  content.innerHTML = `
-    <p><b>Mã hóa đơn:</b> ${inv.invoiceId}</p>
-    <p><b>Số tiền:</b> ${inv.amount.toLocaleString('vi-VN')} vnđ</p>
-    <p><b>Gói:</b> ${inv.packageKey}</p>
-    <hr class="my-2"/>
-    <p><b>Thông tin chuyển khoản:</b></p>
-    <p>Số tài khoản: <b>${BANK_INFO.account}</b> - Ngân hàng: <b>${BANK_INFO.bank}</b></p>
-    <p>Nội dung chuyển khoản (bắt buộc): <code>${BANK_INFO.notePrefix}-${inv.invoiceId}</code></p>
-    <p class="text-sm text-gray-500 mt-2">Sau khi chuyển khoản, admin sẽ kiểm tra và đổi trạng thái hóa đơn sang <b>paid</b>. Khi đó tài khoản bạn sẽ được cấp VIP tương ứng.</p>
-  `;
-  showModal('invoice-modal');
-}
-
-function copyInvoice() {
-  const text = document.getElementById('invoice-content').innerText;
-  navigator.clipboard.writeText(text).then(()=> showToast('Đã sao chép thông tin'));
-}
-
-/* ============== Admin: approve invoices =============== */
-document.getElementById('admin-button').addEventListener('click', ()=> {
-  const ui = document.getElementById('admin-ui');
-  ui.classList.toggle('hidden');
-  if (!ui.classList.contains('hidden')) loadPendingInvoices();
-});
-
-async function loadPendingInvoices() {
-  const list = document.getElementById('invoices-list');
-  list.innerHTML = '<div class="text-sm text-gray-500">Đang tải...</div>';
-  try {
-    const snap = await db.collection('invoices').orderBy('createdAt','desc').limit(50).get();
-    list.innerHTML = '';
-    snap.forEach(doc => {
-      const d = doc.data();
-      const elRow = document.createElement('div');
-      elRow.className = 'p-2 border rounded';
-      elRow.innerHTML = `<div class="font-bold text-sm">${d.invoiceId} - ${d.amount.toLocaleString('vi-VN')} đ</div><div class="text-xs text-gray-500">${d.userName} • ${d.status}</div>`;
-      const btnApprove = document.createElement('button'); btnApprove.className='btn btn-primary mt-2'; btnApprove.innerText='Đã thanh toán & Cấp VIP';
-      btnApprove.onclick = ()=> approveInvoice(doc.id, d);
-      elRow.appendChild(btnApprove);
-      list.appendChild(elRow);
+  function renderVip() {
+    const list = document.getElementById('vip-list');
+    Object.keys(VIP_PACKAGES).forEach(k => {
+        const p = VIP_PACKAGES[k];
+        list.innerHTML += `
+          <div class="vip-card">
+            <div class="text-sm font-bold">${p.label}</div>
+            <div class="text-green-600 font-bold my-2 text-md">${p.price.toLocaleString()}đ</div>
+            <button class="btn-primary text-xs px-3 py-1.5 rounded-md w-full" onclick="window.Eco.showToast('Hệ thống thanh toán đang nâng cấp')">Đăng ký</button>
+          </div>`;
     });
-  } catch(e) {
-    console.error(e);
-    list.innerHTML = '<div class="text-sm text-red-500">Lỗi tải hóa đơn</div>';
   }
-}
 
-async function approveInvoice(docId, invData) {
-  if (!confirm('Xác nhận đã nhận tiền?')) return;
-  try {
-    await db.collection('invoices').doc(docId).update({ status:'paid', paidAt: firebase.firestore.FieldValue.serverTimestamp() });
-    // grant VIP: calculate expiry based on package days
-    const pkg = VIP_PACKAGES[invData.packageKey];
-    let expiry = null;
-    if (pkg && pkg.days > 0) expiry = new Date(Date.now() + pkg.days*24*3600*1000);
-    await db.collection('users').doc(invData.uid).set({
-      vipLevel: invData.packageKey,
-      vipExpiry: expiry ? firebase.firestore.Timestamp.fromDate(expiry) : null
-    }, { merge: true });
-    showToast('Đã cấp VIP cho user');
-    loadPendingInvoices();
-  } catch(e) { console.error(e); showToast('Lỗi khi cập nhật: ' + e.message, 4000); }
-}
-
-/* keep admin invoice UI updated realtime */
-db.collection('invoices').orderBy('createdAt','desc').onSnapshot(()=> {
-  const ui = document.getElementById('admin-ui');
-  if (!ui.classList.contains('hidden')) loadPendingInvoices();
-});
-
-/* ========== Handle expired posts cleanup (client attempt) ========== */
-/* Note: production cleanup should be done via Cloud Function scheduled job.
-   Client will attempt to delete expired posts if security rules allow the user. */
-db.collection('posts').onSnapshot(snap=>{
-  const now = new Date();
-  snap.docs.forEach(doc=>{
-    const d = doc.data();
-    if (d.expiryDate && d.expiryDate.toDate && d.expiryDate.toDate() < now) {
-      db.collection('posts').doc(doc.id).delete().catch(e => console.warn('failed delete expired', e));
-    }
+  window.Eco.auth.onAuthStateChanged(async user => {
+    currentUser = user;
+    const info = document.getElementById('auth-info');
+    if (user) {
+        info.innerHTML = `<img src="${user.photoURL || 'https://via.placeholder.com/30'} " class="w-6 h-6 rounded-full inline mr-1"> ${user.displayName || 'Tài khoản'}`;
+        const isAdmin = await window.Eco.checkIsAdmin(user);
+        if (isAdmin) info.innerHTML += ' <span class="bg-red-100 text-red-600 text-[10px] px-1 rounded">Admin</span>';
+    } else { info.innerText = 'Đăng nhập'; }
   });
-});
 
-/* ========== Initial actions on page load ========== */
-document.addEventListener('DOMContentLoaded', ()=> {
-  detectIframeFallback();
-  // Render vip list placeholder if needed
-  // ... optionally render vip cards, etc.
-});
+  function handleAuthClick() {
+    if (currentUser) { if(confirm('Đăng xuất?')) window.Eco.auth.signOut(); }
+    else window.loginGoogleAdmin();
+  }
 
-/* ========== Quick utilities ========== */
-function isAdminEmail(email) { return ADMIN_EMAILS.includes(email); }
+  async function fetchData() {
+    const grid = document.getElementById('listing-grid');
+    grid.innerHTML = '<p class="col-span-full text-center text-gray-400 py-20">Đang tải dữ liệu...</p>';
+    try {
+        const snap = await window.Eco.db.collection('market').orderBy('createdAt','desc').limit(20).get();
+        grid.innerHTML = '';
+        if (snap.empty) {
+            grid.innerHTML = '<p class="col-span-full text-center text-gray-400 py-20">Chưa có tin rao nào.</p>';
+            return;
+        }
+        snap.forEach(doc => {
+            const d = doc.data();
+            grid.innerHTML += `
+                <div class="card p-2 bg-white rounded-lg shadow-sm hover:shadow-md transition cursor-pointer">
+                    <div class="h-32 bg-gray-200 mb-2 rounded-md" style="background:url(${d.images?.[0] || 'https://via.placeholder.com/300x200'}) center/cover"></div>
+                    <div class="font-bold line-clamp-1 text-sm text-slate-700">${d.title}</div>
+                    <div class="text-red-600 font-bold mt-1 text-sm">${(d.price||0).toLocaleString()}đ</div>
+                </div>`;
+        });
+    } catch (e) {
+        grid.innerHTML = '<p class="col-span-full text-center text-red-400">Không thể kết nối dữ liệu.</p>';
+    }
+  }
+
+  window.openPostModal = () => {
+    if (!currentUser) return window.loginGoogleAdmin();
+    document.getElementById('post-modal').classList.add('active');
+  };
+  window.closeModal = id => document.getElementById(id).classList.remove('active');
+  window.setCat = (c, el) => { 
+    document.querySelectorAll('.filter-chip').forEach(x=>x.classList.remove('active')); 
+    el.classList.add('active'); 
+    fetchData(); // Trong thực tế sẽ code logic filter Firestore
+  };
+
+  async function uploadPost() {
+    const title = document.getElementById('p-title').value;
+    const price = document.getElementById('p-price').value;
+    if (!title || !price) return window.Eco.showToast('Vui lòng điền đủ thông tin', 'error');
+    
+    try {
+        await window.Eco.db.collection('market').add({
+            title, price: Number(price),
+            uid: currentUser.uid,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        window.Eco.showToast('Đăng tin thành công!');
+        closeModal('post-modal');
+        fetchData();
+    } catch(e) { window.Eco.showToast('Lỗi đăng tin', 'error'); }
+  }
+
+  renderVip();
+  fetchData();
 </script>
 </body>
 </html>
