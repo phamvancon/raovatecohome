@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EcoHome Nhơn Bình - Chợ Rao Vặt</title>
+
+  <!-- Tailwind (dev CDN ok for testing) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Firebase v10 compat (kept here) -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+
+  <!-- common.js (shared logic) - MAKE SURE this file exists in the same folder -->
+  <script src="common.js"></script>
+
+  <!-- Fallback: nếu common.js không load được (404) thì tạo Eco tạm để trang không vỡ -->
+  <script>
+    if (typeof window.Eco === 'undefined') {
+      // Firebase config (same as in common.js)
+      const firebaseConfig = {
+        apiKey: "AIzaSyCxS6oT6h9XTc-rB3X1gSnlfvNfshy7Mxs",
+        authDomain: "rao-vat-ecohome-3d11d.firebaseapp.com",
+        projectId: "rao-vat-ecohome-3d11d",
+        storageBucket: "rao-vat-ecohome-3d11d.firebasestorage.app",
+        messagingSenderId: "610650533071",
+        appId: "1:610650533071:web:522508a572b17da9ad9bba"
+      };
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+
+      window.Eco = {
+        auth: firebase.auth(),
+        db: firebase.firestore(),
+        storage: firebase.storage(),
+        adminEmails: ['phamvanconcn@gmail.com'],
+        checkIsAdmin: async function(user) { return !!user && this.adminEmails.includes(user.email); },
+        showToast: function(msg, type='info') {
+          const t = document.getElementById('toast');
+          if (!t) { console.log('Toast:', msg); return; }
+          t.innerText = msg;
+          t.style.backgroundColor = type === 'error' ? '#ef4444' : '#0000';
+          t.classList.remove('hidden');
+          setTimeout(()=> t.classList.add('hidden'), 3500);
+        },
+        listenSystemSettings: function(callback) {
+          return this.db.collection('settings').doc('payment')
+            .onSnapshot(doc => callback(doc.exists ? doc.data() : null),
+                    err => console.error('listen settings error', err));
+        },
+        updateAdminPayment: async function(bankName, account, qrFile) {
+          const payload = { bankName, account, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+          if (qrFile) {
+            const ref = this.storage.ref(`settings/payment_qr_${Date.now()}_${qrFile.name}`);
+            const task = await ref.put(qrFile);
+            payload.qrUrl = await task.ref.getDownloadURL();
+          }
+          return this.db.collection('settings').doc('payment').set(payload, { merge: true });
+        },
+        approveVipUser: async function(purchaseId, uid) {
+          const batch = this.db.batch();
+          const pRef = this.db.collection('purchases').doc(purchaseId);
+          batch.update(pRef, { status: 'approved', approvedAt: firebase.firestore.FieldValue.serverTimestamp() });
+          const uRef = this.db.collection('users').doc(uid);
+          batch.set(uRef, { tier: 'vip_pro', tierAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+          return batch.commit();
+        },
+        escapeHtml: function(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
+      };
+      console.log('✅ Eco fallback initialized (common.js missing)');
+    }
+  </script>
+
+  <style>
+    :root { --eco-green: #2d8a3c; --eco-blue: #0076a3; --bg: #f8fafc; }
+    body { background: var(--bg); font-family: 'Segoe UI', Roboto, sans-serif; }
+    .btn-primary { background-color: var(--eco-green); color: white; font-weight: 700; }
+    .card { background: white; border-radius: 10px; border: 1px solid #eef2f6; }
+    .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 60; background: rgba(2,6,23,0.6); padding: 16px; }
+    .modal.active { display: flex; }
+    .badge-block { background: var(--eco-blue); color: #fff; font-size: 11px; padding: 4px 8px; border-radius: 6px; }
+    .price { color: #d0021b; font-weight: 700; }
+    .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .hidden-xs { display: none; }
+    @media(min-width:640px){ .hidden-xs { display: block; } }
+    .filter-chip { padding:6px 10px; border-radius:8px; border:1px solid #e6edf3; cursor:pointer; font-size:13px; }
+    .filter-chip.active { background:var(--eco-green); color:white; border-color:transparent; }
+
+    /* VIP responsive styles */
+    .vip-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: stretch; }
+    .vip-card { background: #fff; border-radius: 10px; padding: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); display:flex; flex-direction:column; gap:8px; align-items:flex-start; min-width: 140px; }
+    .vip-title { font-size: 15px; font-weight:700; }
+    .vip-price { color: #16a34a; font-weight:800; }
+    .vip-pay { background: var(--eco-green); color: #fff; border:none; padding:8px 10px; border-radius:8px; cursor:pointer; width:100%; text-align:center; }
+
+    @media (max-width: 640px) {
+      .vip-list { display:flex; gap:10px; overflow-x:auto; padding:8px 4px; }
+      .vip-card { min-width: 160px; padding:10px; border-radius:8px; }
+      header .max-w-6xl { padding-left: 12px; padding-right: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="bg-white shadow sticky top-0 z-50">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3 cursor-pointer" onclick="location.reload()">
+      <img src="https://cdn.abacus.ai/images/08379504-c82c-404b-89e1-34ac87a1e264.png" alt="EcoHome" class="h-14 object-contain">
+      <div class="hidden-xs">
+        <div class="font-bold text-lg text-slate-700">EcoHome Nhơn Bình</div>
+        <div class="text-[11px] text-slate-500">Chợ nội bộ cư dân & rao vặt</div>
+      </div>
+    </div>
+
+    <div class="flex-1 px-4 max-w-2xl">
+      <div class="relative">
+        <input id="main-search" class="w-full border rounded-full px-4 py-2 text-sm" placeholder="Tìm kiếm: tiêu đề, vị trí, điện thoại..." />
+        <button class="absolute right-3 top-2 text-gray-400" onclick="handleSearch()"><i class="fas fa-search"></i></button>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <div id="auth-info" class="text-sm text-slate-600 cursor-pointer" onclick="handleAuthClick()">Đăng nhập</div>
+      <button class="btn-primary px-4 py-2 rounded-full" onclick="openPostModal()"><i class="fas fa-plus mr-2"></i>Đăng tin</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-6">
+  <!-- VIP / Buy CTA (REPLACED with responsive cards) -->
+  <section class="mb-6">
+    <div class="bg-white p-4 rounded-lg shadow flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div>
+        <h3 class="font-bold text-lg">Gói VIP - Ưu tiên hiển thị</h3>
+        <p class="text-sm text-slate-500">Chọn gói phù hợp để tin của bạn được ưu tiên và tiếp cận nhiều người hơn.</p>
+      </div>
+
+      <div style="min-width:220px;">
+        <!-- Responsive horizontal VIP cards -->
+        <div class="vip-list" id="vip-list">
+          <!-- Cards injected by JS on load -->
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Filters (including Block 1 / Block 5) -->
+  <section class="mb-4">
+    <div class="bg-white p-4 rounded-lg shadow">
+      <div class="flex flex-wrap gap-3 items-center">
+        <div class="filter-chip active" onclick="setCategory('', this)">Tất cả</div>
+        <div class="filter-chip" onclick="setCategory('Block 1', this)"><i class="fas fa-building mr-1"></i> Block 1</div>
+        <div class="filter-chip" onclick="setCategory('Block 5', this)"><i class="fas fa-building mr-1"></i> Block 5</div>
+        <div class="filter-chip" onclick="setCategory('Do dung', this)"><i class="fas fa-couch mr-1"></i> Đồ dùng</div>
+
+        <div class="ml-auto flex gap-3 items-center">
+          <select id="filter-price" onchange="handleFilterChange()" class="border px-2 py-1 rounded">
+            <option value="">Giá: Tất cả</option>
+            <option value="0-50000">Dưới 500k</option>
+            <option value="50000-5000000">500k - 5 triệu</option>
+            <option value="5000000-up">Trên 5 triệu</option>
+          </select>
+          <button class="px-3 py-1 border rounded" onclick="resetFilters()">Đặt lại</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Listing grid -->
+  <section>
+    <div id="listing-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      <!-- Items injected by JS -->
+    </div>
+
+    <div class="text-center mt-8">
+      <button id="load-more-btn" class="px-6 py-2 border rounded hidden" onclick="loadMoreData()">Xem thêm</button>
+    </div>
+  </section>
+</main>
+
+<!-- POST Modal -->
+<div id="post-modal" class="modal">
+  <div class="bg-white rounded-lg w-full max-w-2xl p-4 overflow-y-auto max-h-[85vh]">
+    <div class="flex justify-between items-center mb-3">
+      <h3 class="font-bold">Đăng tin rao vặt</h3>
+      <button onclick="closeModal('post-modal')" class="text-xl">&times;</button>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="text-xs font-bold">Hình (tối đa 5)</label>
+        <div class="flex gap-2 mt-2 items-center">
+          <div id="image-previews" class="flex gap-2"></div>
+          <label class="w-20 h-20 border-2 border-dashed rounded flex items-center justify-center cursor-pointer">
+            <i class="fas fa-camera text-lg"></i>
+            <input id="file-input" type="file" accept="image/*" multiple class="hidden" onchange="handleFiles(this)">
+          </label>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs">Phân loại</label>
+          <select id="p-cat" class="w-full border rounded px-2 py-1">
+            <option value="Block 1">Block 1</option>
+            <option value="Block 5">Block 5</option>
+            <option value="Do dung">Đồ dùng</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs">Giá (VNĐ)</label>
+          <input id="p-price" type="number" class="w-full border rounded px-2 py-1">
+        </div>
+      </div>
+
+      <input id="p-title" type="text" placeholder="Tiêu đề" class="w-full border rounded px-2 py-2">
+      <textarea id="p-desc" rows="4" placeholder="Mô tả chi tiết" class="w-full border rounded p-2"></textarea>
+      <div class="grid grid-cols-2 gap-3">
+        <input id="p-city" placeholder="Thành phố" class="w-full border rounded px-2 py-1">
+        <input id="p-phone" placeholder="Số điện thoại" class="w-full border rounded px-2 py-1">
+      </div>
+
+      <div id="upload-progress-container" class="hidden">
+        <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+          <div id="main-progress-bar" class="h-full bg-green-500" style="width:0%"></div>
+        </div>
+        <p id="percent-text" class="text-xs text-right">0%</p>
+      </div>
+
+      <button id="submit-post-btn" class="btn-primary w-full py-2 rounded" onclick="uploadPost()">Đăng tin</button>
+    </div>
+  </div>
+</div>
+
+<!-- BUY VIP Modal (unchanged modal for uploading proof / bank info / QR) -->
+<div id="buy-vip-modal" class="modal">
+  <div class="bg-white rounded-lg w-full max-w-xl p-4">
+    <div class="flex justify-between items-center">
+      <h3 class="font-bold">Mua gói VIP</h3>
+      <button onclick="closeModal('buy-vip-modal')" class="text-xl">&times;</button>
+    </div>
+
+    <div class="mt-3">
+      <div id="selected-package" class="font-bold text-lg"></div>
+
+      <div class="grid grid-cols-2 gap-3 mt-3">
+        <div>
+          <div class="text-xs text-gray-500">Ngân hàng</div>
+          <div id="bank-info" class="border rounded p-3 mt-1">
+            <div id="bank-name" class="font-bold">MBV</div>
+            <div id="bank-account">3659999</div>
+            <div class="text-xs text-slate-500">Chủ tài khoản: PHAM VAN CON</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="text-xs text-gray-500">Mã QR</div>
+          <div id="qr-box" class="border rounded p-3 mt-1 flex items-center justify-center">
+            <img id="payment-qr-img" src="" alt="QR" style="max-height:120px; display:none;">
+            <div id="qr-placeholder" class="text-xs text-gray-400">Chưa có QR</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-3">
+        <div class="text-xs text-gray-600">Upload biên lai / ảnh chuyển khoản để admin duyệt</div>
+        <div class="flex gap-2 mt-2">
+          <input id="proof-input" type="file" accept="image/*">
+          <button class="btn-primary px-3 py-2" onclick="submitVipPurchase()">Gửi bằng chứng</button>
+        </div>
+      </div>
+
+      <p class="text-xs text-gray-500 mt-3">Số tài khoản mặc định: <span class="font-bold">3659999</span> (Ngân hàng MBV). Admin có thể thay đổi trong phần quản trị.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Payment Panel (visible only to admin) -->
+<div id="admin-payment-panel" class="modal" style="display:none">
+  <div class="bg-white rounded-lg w-full max-w-2xl p-4 overflow-y-auto max-h-[85vh]">
+    <div class="flex justify-between items-center">
+      <h3 class="font-bold">Admin - Quản lý Thanh toán & Duyệt Mua VIP</h3>
+      <button onclick="closeModal('admin-payment-panel')" class="text-xl">&times;</button>
+    </div>
+
+    <div class="mt-4 space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-bold">Ngân hàng (tên)</label>
+          <input id="admin-bank-name" class="w-full border rounded px-2 py-1">
+        </div>
+        <div>
+          <label class="text-xs font-bold">Số tài khoản</label>
+          <input id="admin-bank-account" class="w-full border rounded px-2 py-1">
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs font-bold">Upload mã QR</label>
+        <input id="admin-qr-input" type="file" accept="image/*">
+        <div class="mt-2">
+          <button class="btn-primary px-3 py-2" onclick="savePaymentSettings()">Lưu</button>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="font-bold">Yêu cầu mua VIP</h4>
+        <div id="admin-purchases-list" class="space-y-2 mt-2"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded hidden z-50"></div>
+
+<script>
+  // ---- Use shared Eco object from common.js (or fallback created above) ----
+  if (typeof window.Eco === 'undefined') {
+    console.error('common.js not found and fallback failed. Please add common.js to your site.');
+  }
+  const { auth, db, storage } = window.Eco || {};
+
+  // ==== VIP PACKAGES (kept here) ====
+  const VIP_PACKAGES = {
+    vip: { price: 50000, days: 60, label: 'VIP (60 ngày)' },
+    vips: { price: 100000, days: 90, label: 'VIPS (90 ngày)' },
+    vipss: { price: 150000, days: 120, label: 'VIPSS (120 ngày)' },
+    vipsss: { price: 1000000, days: 0, label: 'VIPSSS (Vĩnh viễn)' } // example price for permanent
+  };
+
+  // ==== State ====
+  let currentUser = null;
+  let selectedFiles = [];
+  let currentCategory = '';
+  let lastDoc = null;
+  const PAGE_SIZE = 15;
+  let selectedPackageId = null;
+
+  // ==== Render VIP cards into vip-list ====
+  function renderVipCards() {
+    const container = document.getElementById('vip-list');
+    container.innerHTML = '';
+    Object.keys(VIP_PACKAGES).forEach(key => {
+      const pkg = VIP_PACKAGES[key];
+      const card = document.createElement('div');
+      card.className = 'vip-card';
+      card.innerHTML = `
+        <div class="vip-title">${pkg.label}</div>
+        <div class="vip-price">${new Intl.NumberFormat('vi-VN').format(pkg.price)} đ</div>
+        <button class="vip-pay" data-pkg="${key}" onclick="onVipPayClick(this)">Mua & Mở App</button>
+        <button class="vip-pay" style="background:#444;margin-top:6px;" data-pkg="${key}" onclick="openBuyVipModal('${key}')">Mua & Gửi bằng chứng</button>
+      `;
+      container.appendChild(card);
+    });
+  }
+  renderVipCards();
+
+  // ==== Auth handlers ====
+  (window.Eco && Eco.auth) && Eco.auth.onAuthStateChanged(async user => {
+    currentUser = user;
+    const info = document.getElementById('auth-info');
+    const previousAdminBtn = document.getElementById('admin-open-btn');
+    if (previousAdminBtn) previousAdminBtn.remove();
+
+    if (user) {
+      info.innerHTML = `<div class="flex items-center gap-2"><img src="${user.photoURL || 'https://www.gravatar.com/avatar?d=mp'}" class="w-8 h-8 rounded-full"> ${user.displayName || user.email}</div>`;
+      const isAdmin = await (Eco.checkIsAdmin ? Eco.checkIsAdmin(user) : (user.email === 'phamvanconcn@gmail.com'));
+      if (isAdmin) {
+        info.insertAdjacentHTML('afterend', `<button id="admin-open-btn" class="ml-3 px-3 py-2 border rounded" onclick="openAdminPanel()">Admin</button>`);
+        loadAdminPurchases();
+      }
+    } else {
+      info.innerText = 'Đăng nhập';
+    }
+  });
+
+  function handleAuthClick() {
+    if (!window.Eco || !Eco.auth) return alert('common.js chưa được load');
+    if (!Eco.auth.currentUser) {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      Eco.auth.signInWithPopup(provider).catch(e => Eco.showToast ? Eco.showToast('Lỗi đăng nhập', 'error') : alert('Lỗi đăng nhập'));
+    } else {
+      Eco.auth.signOut();
+    }
+  }
+
+  // ==== Toast ====
+  function showToast(msg, timeout=3000) {
+    if (window.Eco && Eco.showToast) return Eco.showToast(msg);
+    const t = document.getElementById('toast');
+    t.innerText = msg;
+    t.classList.remove('hidden');
+    setTimeout(()=> t.classList.add('hidden'), timeout);
+  }
+
+  // ==== Listing & Filters (unchanged) ====
+  function setCategory(cat, el) {
+    currentCategory = cat;
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    fetchData(true);
+  }
+  function handleFilterChange(){ fetchData(true); }
+  function resetFilters(){ document.getElementById('filter-price').value=''; currentCategory=''; document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active')); document.querySelector('.filter-chip').classList.add('active'); fetchData(true); }
+
+  async function fetchData(reset=false) {
+    const grid = document.getElementById('listing-grid');
+    const loadMoreBtn = document.getElementById('load-more-btn');
+    if (reset) { grid.innerHTML=''; lastDoc=null; }
+
+    try {
+      let q;
+      if (currentCategory) q = db.collection('market').where('category','==', currentCategory).orderBy('createdAt','desc').limit(PAGE_SIZE);
+      else q = db.collection('market').orderBy('isBoosted','desc').orderBy('createdAt','desc').limit(PAGE_SIZE);
+
+      if (lastDoc) q = q.startAfter(lastDoc);
+
+      const snap = await q.get();
+      if (!snap.empty) lastDoc = snap.docs[snap.docs.length-1];
+
+      if (snap.empty && reset) {
+        grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">Chưa có tin</div>';
+        return;
+      }
+
+      snap.forEach(doc => {
+        const d = doc.data();
+        const card = document.createElement('div');
+        card.className = 'card cursor-pointer';
+        card.onclick = ()=> openDetail(doc.id);
+        card.innerHTML = `
+          <div style="height:140px; background-image:url(${d.images?.[0] || 'https://via.placeholder.com/300x200'}); background-size:cover; background-position:center;"></div>
+          <div class="p-3">
+            <div class="flex items-center justify-between">
+              <div class="badge-block">${d.category || ''}</div>
+              ${d.isBoosted ? '<div class="text-xs text-amber-600 font-bold">Ưu tiên</div>' : ''}
+            </div>
+            <h4 class="text-sm font-bold mt-2 line-clamp-2">${Eco && Eco.escapeHtml ? Eco.escapeHtml(d.title || '') : (d.title||'')}</h4>
+            <div class="mt-2 price">${new Intl.NumberFormat('vi-VN').format(d.price || 0)} đ</div>
+            <div class="text-xs text-gray-500 mt-2">${d.city || ''} • ${d.createdAt ? timeSince(d.createdAt.toDate()) : 'vừa xong'}</div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      loadMoreBtn.classList.toggle('hidden', snap.size < PAGE_SIZE);
+    } catch (e) {
+      console.error(e);
+      showToast('Lỗi tải dữ liệu');
+    }
+  }
+
+  function loadMoreData(){ fetchData(); }
+  function openDetail(id){
+    db.collection('market').doc(id).get().then(doc=>{
+      const d = doc.data();
+      alert(`Tiêu đề: ${d.title}\nGiá: ${d.price}\nLiên hệ: ${d.phone || 'N/A'}`);
+    });
+  }
+  function timeSince(date){
+    const seconds = Math.floor((new Date()-date)/1000);
+    let interval = seconds / 31536000;
+    if (interval>1) return Math.floor(interval)+' năm trước';
+    interval = seconds/2592000; if(interval>1) return Math.floor(interval)+' tháng trước';
+    interval = seconds/86400; if(interval>1) return Math.floor(interval)+' ngày trước';
+    interval = seconds/3600; if(interval>1) return Math.floor(interval)+' giờ trước';
+    interval = seconds/60; if(interval>1) return Math.floor(interval)+' phút trước';
+    return 'vừa xong';
+  }
+
+  // init fetch
+  fetchData();
+
+  // ==== Image upload preview & resize ====
+  async function handleFiles(input) {
+    const files = Array.from(input.files).slice(0,5);
+    selectedFiles = files;
+    const prev = document.getElementById('image-previews');
+    prev.innerHTML = '';
+    for (const f of files) {
+      const dataUrl = await readFileAsDataURL(f);
+      const el = document.createElement('div');
+      el.className = 'w-20 h-20 rounded overflow-hidden';
+      el.style.background = `url(${dataUrl}) center/cover`;
+      prev.appendChild(el);
+    }
+  }
+  function readFileAsDataURL(file){ return new Promise(resolve => { const r=new FileReader(); r.onload=e=>resolve(e.target.result); r.readAsDataURL(file); }); }
+
+  // ==== Post upload logic with progress ====
+  async function uploadPost() {
+    if (!currentUser) { handleAuthClick(); return; }
+    const title = document.getElementById('p-title').value;
+    const price = document.getElementById('p-price').value;
+    if (!title || !price || selectedFiles.length===0) return showToast('Vui lòng nhập đủ thông tin và chọn ảnh');
+
+    const btn = document.getElementById('submit-post-btn');
+    btn.disabled = true;
+    document.getElementById('upload-progress-container').classList.remove('hidden');
+
+    try {
+      const imageUrls = [];
+      for (let i=0;i<selectedFiles.length;i++){
+        const file = selectedFiles[i];
+        const ref = storage.ref(`market/${currentUser.uid}_${Date.now()}_${i}_${file.name}`);
+        const task = ref.put(file);
+        await new Promise((res, rej)=> {
+          task.on('state_changed', snap => {
+            const p = Math.round((snap.bytesTransferred/snap.totalBytes)*100);
+            document.getElementById('main-progress-bar').style.width = `${p}%`;
+            document.getElementById('percent-text').innerText = `${p}%`;
+          }, err => rej(err), async () => { imageUrls.push(await task.snapshot.ref.getDownloadURL()); res(); });
+        });
+      }
+
+      await db.collection('market').add({
+        title, price: Number(price),
+        category: document.getElementById('p-cat').value,
+        desc: document.getElementById('p-desc').value,
+        city: document.getElementById('p-city').value,
+        phone: document.getElementById('p-phone').value,
+        images: imageUrls,
+        uid: currentUser.uid,
+        email: currentUser.email || null,
+        isBoosted: false,
+        status: 'active',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      showToast('Đăng tin thành công');
+      closeModal('post-modal');
+      setTimeout(()=>location.reload(),800);
+    } catch (e) {
+      console.error(e);
+      showToast('Lỗi đăng tin');
+      btn.disabled = false;
+    }
+  }
+
+  // ==== BUY VIP Flow & Deep-link to mobile apps ====
+  if (window.Eco && Eco.listenSystemSettings) {
+    Eco.listenSystemSettings(data => {
+      const bankNameEl = document.getElementById('bank-name');
+      const bankAccountEl = document.getElementById('bank-account');
+      const qrImg = document.getElementById('payment-qr-img');
+      const qrPlaceholder = document.getElementById('qr-placeholder');
+      if (data) {
+        bankNameEl.innerText = data.bankName || 'MBV';
+        bankAccountEl.innerText = data.account || '3659999';
+        if (data.qrUrl) {
+          qrImg.src = data.qrUrl;
+          qrImg.style.display = 'block';
+          qrPlaceholder.style.display = 'none';
+        } else {
+          qrImg.style.display = 'none';
+          qrPlaceholder.style.display = 'block';
+        }
+      }
+    });
+  } else {
+    loadPaymentSettings();
+  }
+
+  async function loadPaymentSettings(){
+    try {
+      const doc = await db.collection('settings').doc('payment').get();
+      const data = doc.exists ? doc.data() : {};
+      document.getElementById('bank-name').innerText = data.bankName || 'MBV';
+      document.getElementById('bank-account').innerText = data.account || '3659999';
+      if (data.qrUrl){
+        document.getElementById('payment-qr-img').src = data.qrUrl;
+        document.getElementById('payment-qr-img').style.display = 'block';
+        document.getElementById('qr-placeholder').style.display = 'none';
+      } else {
+        document.getElementById('payment-qr-img').style.display = 'none';
+        document.getElementById('qr-placeholder').style.display = 'block';
+      }
+    } catch (e) { console.error(e); }
+  }
+
+  function openBuyVipModal(pkgId){
+    if (!Eco || !Eco.auth) return alert('Chưa sẵn sàng');
+    if (!Eco.auth.currentUser) { handleAuthClick(); return; }
+    selectedPackageId = pkgId || 'vip';
+    document.getElementById('selected-package').innerText = VIP_PACKAGES[selectedPackageId].label + ' — ' + new Intl.NumberFormat('vi-VN').format(VIP_PACKAGES[selectedPackageId].price) + '₫';
+    document.getElementById('buy-vip-modal').classList.add('active');
+  }
+
+  async function submitVipPurchase(){
+    const fileInput = document.getElementById('proof-input');
+    if (!fileInput.files || !fileInput.files[0]) return showToast('Chọn ảnh biên lai', 3000);
+    if (!selectedPackageId) return showToast('Chọn gói', 3000);
+
+    const user = Eco.auth.currentUser;
+    if (!user) return showToast('Đăng nhập trước', 3000);
+
+    const file = fileInput.files[0];
+    const path = `purchase_proofs/${user.uid}_${Date.now()}_${file.name}`;
+    const ref = storage.ref(path);
+    try {
+      const task = await ref.put(file);
+      const url = await task.ref.getDownloadURL();
+      await db.collection('purchases').add({
+        uid: user.uid,
+        email: user.email || null,
+        packageId: selectedPackageId,
+        packageLabel: VIP_PACKAGES[selectedPackageId].label,
+        amount: VIP_PACKAGES[selectedPackageId].price,
+        proofUrl: url,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        status: 'pending'
+      });
+      showToast('Gửi yêu cầu thành công. Admin sẽ duyệt.');
+      closeModal('buy-vip-modal');
+    } catch (e) {
+      console.error(e);
+      showToast('Lỗi upload bằng chứng', 4000);
+    }
+  }
+
+  // Try to open app via list of URIs / intent, fallback to URL or QR modal
+  function tryOpenPaymentApps({pkgKey, amount, description}, fallbackUrl) {
+    // Candidate schemes (examples) - replace with exact schemes/packages if you have them
+    const schemes = [
+      // Momo common attempts (example)
+      {uri: `momo://app`, package: 'com.mservice.mm', desc:'Momo'},
+      // Try a generic payment intent (example)
+      {uri: `vnpay://pay?amount=${amount}&info=${encodeURIComponent(description)}`, package: ''},
+      // Add bank app intents here if you know the package/scheme
+    ];
+
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    let tried = false;
+    // Use timestamp technique
+    const start = Date.now();
+    function openUri(uri, pkg) {
+      tried = true;
+      try {
+        if (isAndroid && pkg) {
+          // Build intent URI (best-effort)
+          const path = uri.replace(/^[a-zA-Z]+:\/\//, '');
+          const intent = `intent://${path}#Intent;package=${pkg};scheme=${uri.split(':')[0]};end`;
+          window.location = intent;
+        } else {
+          // iOS or generic
+          window.location = uri;
+        }
+      } catch (e) {
+        console.warn('openUri failed', e);
+      }
+    }
+
+    // Try each scheme sequentially with short delays; after attempts, fallback
+    let i = 0;
+    (function nextTry() {
+      if (i >= schemes.length) {
+        // wait a bit then fallback if app didn't open
+        setTimeout(()=>{
+          if (Date.now() - start < 2000) {
+            // likely app did not open -> fallback
+            if (fallbackUrl) window.location = fallbackUrl;
+            else openBuyVipModal(pkgKey);
+          }
+        }, 900);
+        return;
+      }
+      const s = schemes[i++];
+      openUri(s.uri, s.package);
+      // schedule next try slightly later
+      setTimeout(nextTry, 700);
+    })();
+  }
+
+  // Handler when user clicks "Mua & Mở App"
+  function onVipPayClick(btn) {
+    if (!Eco || !Eco.auth) return alert('Chưa sẵn sàng');
+    if (!Eco.auth.currentUser) { handleAuthClick(); return; }
+
+    const pkgKey = btn.dataset.pkg || 'vip';
+    const pkg = VIP_PACKAGES[pkgKey];
+    const amount = pkg.price;
+    const desc = pkg.label;
+
+    // Fallback web checkout — you should replace this with your real payment landing or VNPay URL
+    const fallbackCheckout = `/pay?vip=${encodeURIComponent(pkgKey)}&amount=${amount}`;
+
+    // Try to open apps (Momo -> VNPay -> fallback)
+    tryOpenPaymentApps({pkgKey, amount, description: desc}, fallbackCheckout);
+  }
+
+  // ==== Admin panel logic ====
+  function openAdminPanel(){ document.getElementById('admin-payment-panel').style.display = 'flex'; document.getElementById('admin-payment-panel').classList.add('active'); }
+
+  async function savePaymentSettings(){
+    if (!Eco || !Eco.auth) return showToast('Chưa sẵn sàng');
+    const user = Eco.auth.currentUser;
+    const isAdmin = user && (Eco.checkIsAdmin ? await Eco.checkIsAdmin(user) : (user.email === 'phamvanconcn@gmail.com'));
+    if (!isAdmin) return showToast('Chỉ Admin mới thực hiện được thao tác này', 4000);
+
+    const name = document.getElementById('admin-bank-name').value;
+    const account = document.getElementById('admin-bank-account').value;
+    const fileInput = document.getElementById('admin-qr-input');
+
+    try {
+      if (Eco.updateAdminPayment) {
+        await Eco.updateAdminPayment(name, account, fileInput.files[0] || null);
+      } else {
+        const payload = { bankName: name, account, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+        if (fileInput.files && fileInput.files[0]) {
+          const f = fileInput.files[0];
+          const ref = storage.ref(`settings/payment_qr_${Date.now()}_${f.name}`);
+          const t = await ref.put(f);
+          payload.qrUrl = await t.ref.getDownloadURL();
+        }
+        await db.collection('settings').doc('payment').set(payload, { merge: true });
+      }
+      showToast('Lưu cấu hình thành công', 3000);
+      if (Eco.listenSystemSettings) loadPaymentSettings();
+    } catch (e) {
+      console.error(e);
+      showToast('Lỗi lưu cài đặt', 4000);
+    }
+  }
+
+  async function loadAdminPurchases(){
+    if (!Eco || !Eco.auth) return;
+    const user = Eco.auth.currentUser;
+    const isAdmin = user && (Eco.checkIsAdmin ? await Eco.checkIsAdmin(user) : (user.email === 'phamvanconcn@gmail.com'));
+    if (!isAdmin) return;
+    document.getElementById('admin-purchases-list').innerHTML = '<div class="text-sm text-gray-500">Đang tải...</div>';
+    const snap = await db.collection('purchases').orderBy('createdAt','desc').limit(100).get();
+    const list = document.getElementById('admin-purchases-list');
+    list.innerHTML = '';
+    snap.forEach(doc => {
+      const d = doc.data();
+      const el = document.createElement('div');
+      el.className = 'p-3 border rounded flex items-center justify-between';
+      el.innerHTML = `
+        <div>
+          <div class="font-bold">${d.packageLabel} — ${d.amount.toLocaleString()}₫</div>
+          <div class="text-xs text-gray-500">${d.email || d.uid} • ${d.createdAt ? new Date(d.createdAt.toMillis ? d.createdAt.toMillis() : d.createdAt.seconds*1000).toLocaleString() : ''}</div>
+          <div class="mt-2"><img src="${d.proofUrl}" style="max-height:90px;" /></div>
+        </div>
+        <div class="flex flex-col gap-2">
+          <button class="btn-primary px-3 py-1" onclick="approvePurchase('${doc.id}','${d.uid}')">Duyệt</button>
+          <button class="px-3 py-1 border" onclick="rejectPurchase('${doc.id}')">Từ chối</button>
+        </div>
+      `;
+      list.appendChild(el);
+    });
+  }
+
+  async function approvePurchase(id, uid){
+    if (!confirm('Duyệt yêu cầu này?')) return;
+    try {
+      if (Eco.approveVipUser) {
+        await Eco.approveVipUser(id, uid);
+      } else {
+        await db.collection('purchases').doc(id).update({ status: 'approved', approvedAt: firebase.firestore.FieldValue.serverTimestamp(), approvedBy: Eco.auth.currentUser.email });
+        await db.collection('users').doc(uid).set({ tier: 'vip_pro', tierAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      }
+      showToast('Đã duyệt. Hệ thống sẽ gán VIP cho user.');
+      loadAdminPurchases();
+    } catch (e) {
+      console.error(e);
+      showToast('Lỗi duyệt', 4000);
+    }
+  }
+  async function rejectPurchase(id){
+    if (!confirm('Từ chối?')) return;
+    try {
+      await db.collection('purchases').doc(id).update({ status: 'rejected', rejectedAt: firebase.firestore.FieldValue.serverTimestamp(), rejectedBy: Eco.auth.currentUser.email });
+      showToast('Đã từ chối');
+      loadAdminPurchases();
+    } catch (e) {
+      console.error(e);
+      showToast('Lỗi từ chối', 4000);
+    }
+  }
+
+  // exposed for testing:
+  window.openPostModal = ()=> { if(!Eco || !Eco.auth) handleAuthClick(); else if(!Eco.auth.currentUser) handleAuthClick(); else document.getElementById('post-modal').classList.add('active'); };
+  window.closeModal = id => { const el = document.getElementById(id); if (!el) return; el.classList.remove('active'); if (id==='admin-payment-panel') { el.style.display='none'; } };
+  window.openAdminPanel = openAdminPanel;
+  window.openBuyVipModal = openBuyVipModal;
+  window.submitVipPurchase = submitVipPurchase;
+
+</script>
+</body>
+</html>
