@@ -1,5 +1,0 @@
-ecohome.id.vn
-echo "ecohome.id.vn" > CNAME
-git add CNAME
-git commit -m "Add CNAME"
-git push
