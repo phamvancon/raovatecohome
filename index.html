@@ -1,304 +1,107 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ecohome Sync - Đồng bộ Web & Mobile</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background-color: #f8fafc;
-            -webkit-tap-highlight-color: transparent;
-            overflow-x: hidden;
-        }
-        .app-container { max-width: 500px; margin: 0 auto; background: white; min-height: 100vh; position: relative; }
-        [v-cloak] { display: none; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        .active-scale:active { transform: scale(0.96); transition: transform 0.1s; }
-        .safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom) + 90px); }
-        
-        /* Hiệu ứng loading skeleton */
-        .skeleton {
-            background: linear-gradient(90deg, #f0f0f0 25%, #f8f8f8 50%, #f0f0f0 75%);
-            background-size: 200% 100%;
-            animation: loading 1.5s infinite;
-        }
-        @keyframes loading {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ecohome</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
 </head>
+
 <body class="bg-gray-100">
 
-    <div id="app" v-cloak class="app-container shadow-2xl min-h-screen">
-        <!-- Header -->
-        <header class="bg-white/90 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50 px-4 h-16 flex items-center justify-between">
-            <div class="flex items-center space-x-2">
-                <div class="bg-green-600 p-2 rounded-xl shadow-lg shadow-green-100">
-                    <i class="fas fa-home text-white text-base"></i>
-                </div>
-                <div>
-                    <h1 class="text-lg font-extrabold text-gray-900 leading-none">Ecohome</h1>
-                    <span class="text-[10px] text-green-600 font-bold uppercase tracking-wider">Hệ thống đồng bộ</span>
-                </div>
-            </div>
-            <div class="flex items-center space-x-3">
-                <button @click="isAdmin = !isAdmin" :class="isAdmin ? 'text-orange-500 bg-orange-50' : 'text-gray-400 bg-gray-50'" class="w-9 h-9 rounded-full flex items-center justify-center transition-colors">
-                    <i class="fas fa-shield-alt text-sm"></i>
-                </button>
-                <div class="w-9 h-9 rounded-full bg-green-50 border border-green-100 flex items-center justify-center">
-                    <i class="fas fa-user text-green-600 text-sm"></i>
-                </div>
-            </div>
-        </header>
+<div id="app" class="max-w-[500px] mx-auto bg-white min-h-screen">
 
-        <!-- Offline Banner -->
-        <div v-if="isOffline" class="bg-red-500 text-white text-[11px] font-bold text-center py-2 sticky top-16 z-40 animate-pulse">
-            <i class="fas fa-wifi-slash mr-2"></i> Mất kết nối mạng - Đang sử dụng dữ liệu ngoại tuyến
-        </div>
+<h1 class="text-xl font-bold p-4">Ecohome Marketplace</h1>
 
-        <main class="safe-bottom">
-            <!-- Search -->
-            <div class="p-4">
-                <div class="relative">
-                    <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                    <input v-model="searchQuery" type="text" placeholder="Tìm kiếm tin đăng..." 
-                        class="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-green-500 transition-all text-sm outline-none">
-                </div>
-            </div>
+<div class="p-4">
+<input v-model="title" placeholder="Tiêu đề"
+class="border p-2 w-full mb-2">
 
-            <!-- Categories -->
-            <div class="px-4 mb-6 overflow-x-auto no-scrollbar flex space-x-4 py-2">
-                <button @click="selectedCategory = 'Tất cả'" class="flex-shrink-0 flex flex-col items-center space-y-2 w-16">
-                    <div :class="selectedCategory === 'Tất cả' ? 'bg-green-600 text-white' : 'bg-gray-50 text-gray-400'" 
-                        class="w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm active-scale transition-all">
-                        <i class="fas fa-th-large text-xl"></i>
-                    </div>
-                    <span class="text-[11px] font-bold" :class="selectedCategory === 'Tất cả' ? 'text-green-600' : 'text-gray-500'">Tất cả</span>
-                </button>
-                
-                <button v-for="cat in categories" :key="cat.name" @click="selectedCategory = cat.name" class="flex-shrink-0 flex flex-col items-center space-y-2 w-16">
-                    <div :class="selectedCategory === cat.name ? `${cat.bgActive} text-white` : 'bg-gray-50 text-gray-400'" 
-                        class="w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm active-scale transition-all">
-                        <i :class="`fas ${cat.icon} text-xl`"></i>
-                    </div>
-                    <span class="text-[11px] font-bold text-center leading-tight">{{ cat.name }}</span>
-                </button>
-            </div>
+<input v-model="price" placeholder="Giá"
+class="border p-2 w-full mb-2">
 
-            <!-- List -->
-            <div class="px-4 space-y-4">
-                <div class="flex items-center justify-between px-1">
-                    <h2 class="text-xl font-black text-gray-900">{{ selectedCategory }}</h2>
-                    <div class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg">CẬP NHẬT LIVE</div>
-                </div>
+<button @click="addPost"
+class="bg-green-600 text-white px-4 py-2 rounded">
+Đăng tin
+</button>
+</div>
 
-                <!-- Skeleton -->
-                <div v-if="loading" class="space-y-4">
-                    <div v-for="n in 3" class="bg-white rounded-[24px] h-32 flex p-3 space-x-4 border border-gray-50">
-                        <div class="w-28 h-full skeleton rounded-2xl"></div>
-                        <div class="flex-1 space-y-3 py-2">
-                            <div class="h-4 skeleton rounded w-5/6"></div>
-                            <div class="h-4 skeleton rounded w-1/2"></div>
-                        </div>
-                    </div>
-                </div>
+<div class="p-4 space-y-2">
+<div v-for="p in posts" :key="p.id"
+class="border p-3 rounded">
 
-                <!-- Posts -->
-                <div v-else class="space-y-4">
-                    <div v-for="post in filteredPosts" :key="post.id" @click="selectedPost = post"
-                        class="bg-white p-3.5 rounded-[24px] border border-gray-100 shadow-sm active-scale flex space-x-4 relative">
-                        <div class="w-28 h-28 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 shrink-0">
-                            <i class="fas fa-image text-3xl"></i>
-                        </div>
-                        <div class="flex-1 flex flex-col justify-between py-1">
-                            <div>
-                                <h3 class="font-bold text-gray-900 text-sm line-clamp-2 leading-snug">{{ post.title }}</h3>
-                                <p class="text-green-600 font-black text-lg mt-1">{{ formatPrice(post.price) }}đ</p>
-                            </div>
-                            <div class="flex items-center justify-between text-[10px] text-gray-400 font-bold">
-                                <span><i class="fas fa-map-marker-alt mr-1"></i>{{ post.location }}</span>
-                                <span>{{ timeAgo(post.createdAt) }}</span>
-                            </div>
-                        </div>
-                        <button v-if="isAdmin" @click.stop="deletePost(post.id)" class="absolute top-2 right-2 text-gray-300 hover:text-red-500 p-2">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                    </div>
-                    
-                    <div v-if="filteredPosts.length === 0" class="py-20 text-center text-gray-400 text-sm font-medium">
-                        Không có dữ liệu trong mục này
-                    </div>
-                </div>
-            </div>
-        </main>
+<b>{{p.title}}</b><br>
+{{p.price}} đ
 
-        <!-- Nav -->
-        <nav class="fixed bottom-0 left-0 right-0 max-w-[500px] mx-auto bg-white/90 backdrop-blur-xl border-t border-gray-100 px-8 py-4 flex justify-between items-center z-50">
-            <button class="flex flex-col items-center text-green-600"><i class="fas fa-home text-2xl"></i></button>
-            <button class="flex flex-col items-center text-gray-300"><i class="fas fa-search text-2xl"></i></button>
-            <button @click="showPostModal = true" class="bg-green-600 w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-xl -mt-12 border-[6px] border-white active-scale">
-                <i class="fas fa-plus text-xl"></i>
-            </button>
-            <button class="flex flex-col items-center text-gray-300"><i class="fas fa-comment-dots text-2xl"></i></button>
-            <button class="flex flex-col items-center text-gray-300"><i class="fas fa-user-circle text-2xl"></i></button>
-        </nav>
+<button @click="del(p.id)"
+class="text-red-500 ml-2">Xóa</button>
 
-        <!-- Modal Post -->
-        <div v-if="showPostModal" class="fixed inset-0 z-[100] flex items-end justify-center">
-            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="showPostModal = false"></div>
-            <div class="bg-white w-full max-w-[500px] rounded-t-[40px] p-8 z-10 relative animate-slide-up">
-                <h2 class="text-2xl font-black mb-6">Đăng tin mới</h2>
-                <div class="space-y-4">
-                    <input v-model="newPost.title" type="text" placeholder="Tiêu đề..." class="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none font-bold">
-                    <div class="grid grid-cols-2 gap-4">
-                        <input v-model="newPost.price" type="number" placeholder="Giá..." class="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none font-bold">
-                        <input v-model="newPost.location" type="text" placeholder="Vị trí..." class="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none font-bold">
-                    </div>
-                    <select v-model="newPost.category" class="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none font-bold">
-                        <option v-for="cat in categories" :value="cat.name">{{ cat.name }}</option>
-                    </select>
-                    <button @click="createPost" :disabled="isSubmitting" class="w-full py-5 bg-green-600 text-white rounded-[24px] font-black text-lg shadow-xl disabled:opacity-50 mt-4">
-                        {{ isSubmitting ? 'Đang gửi...' : 'Xác nhận đăng' }}
-                    </button>
-                </div>
-            </div>
-        </div>
+</div>
+</div>
 
-        <!-- Detail View -->
-        <div v-if="selectedPost" class="fixed inset-0 z-[110] bg-white max-w-[500px] mx-auto animate-slide-in">
-            <div class="relative h-72 bg-gray-100 flex items-center justify-center text-gray-200">
-                <i class="fas fa-image text-5xl"></i>
-                <button @click="selectedPost = null" class="absolute top-6 left-6 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center text-gray-900"><i class="fas fa-arrow-left"></i></button>
-            </div>
-            <div class="p-6">
-                <span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase">{{ selectedPost.category }}</span>
-                <h1 class="text-2xl font-black text-gray-900 mt-4 leading-tight">{{ selectedPost.title }}</h1>
-                <p class="text-3xl font-black text-green-600 mt-2">{{ formatPrice(selectedPost.price) }}đ</p>
-                <div class="mt-8 grid grid-cols-2 gap-4">
-                    <div class="bg-gray-50 p-4 rounded-2xl">
-                        <p class="text-[10px] text-gray-400 font-bold uppercase">Vị trí</p>
-                        <p class="font-bold">{{ selectedPost.location }}</p>
-                    </div>
-                    <div class="bg-gray-50 p-4 rounded-2xl">
-                        <p class="text-[10px] text-gray-400 font-bold uppercase">Ngày đăng</p>
-                        <p class="font-bold">{{ new Date(selectedPost.createdAt).toLocaleDateString('vi-VN') }}</p>
-                    </div>
-                </div>
-                <div class="flex space-x-4 mt-8">
-                    <button class="flex-1 bg-gray-900 text-white py-4 rounded-2xl font-black">Nhắn tin</button>
-                    <button class="flex-1 bg-green-600 text-white py-4 rounded-2xl font-black">Gọi điện</button>
-                </div>
-            </div>
-        </div>
-    </div>
+</div>
 
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, deleteDoc, doc, serverTimestamp, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'ecohome-id-vn-fixed';
+const firebaseConfig = {
+  apiKey: "AIzaSyBarAIDkBaifVuPg7yJV14gFd0lUPzUXH4",
+  authDomain: "ecohome-marketplace.firebaseapp.com",
+  projectId: "ecohome-marketplace",
+  storageBucket: "ecohome-marketplace.firebasestorage.app",
+  messagingSenderId: "735893375122",
+  appId: "1:735893375122:web:479e1c186b15291f5abe4b"
+};
 
-        try { enableIndexedDbPersistence(db); } catch (e) {}
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
 
-        const { createApp, ref, computed, onMounted } = Vue;
+await signInAnonymously(auth);
 
-        createApp({
-            setup() {
-                const posts = ref([]);
-                const loading = ref(true);
-                const isSubmitting = ref(false);
-                const isOffline = ref(!navigator.onLine);
-                const searchQuery = ref('');
-                const selectedCategory = ref('Tất cả');
-                const showPostModal = ref(false);
-                const selectedPost = ref(null);
-                const isAdmin = ref(false);
-                const newPost = ref({ title: '', price: '', location: '', category: 'Nhà ở' });
+const { createApp, ref, onMounted } = Vue;
 
-                const categories = [
-                    { name: 'Nhà ở', icon: 'fa-home', bgActive: 'bg-blue-600' },
-                    { name: 'Nội thất', icon: 'fa-couch', bgActive: 'bg-purple-600' },
-                    { name: 'Xe cộ', icon: 'fa-car', bgActive: 'bg-orange-600' },
-                    { name: 'Điện thoại', icon: 'fa-mobile-alt', bgActive: 'bg-red-600' }
-                ];
+createApp({
+setup() {
 
-                onMounted(async () => {
-                    window.addEventListener('online', () => isOffline.value = false);
-                    window.addEventListener('offline', () => isOffline.value = true);
+const posts = ref([]);
+const title = ref('');
+const price = ref('');
 
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
+onMounted(() => {
+onSnapshot(collection(db, "posts"), snap => {
+posts.value = snap.docs.map(d => ({
+id: d.id, ...d.data()
+}));
+});
+});
 
-                    onAuthStateChanged(auth, (u) => {
-                        if (u) {
-                            const postsRef = collection(db, 'artifacts', appId, 'public', 'data', 'posts');
-                            onSnapshot(postsRef, (snap) => {
-                                posts.value = snap.docs.map(d => ({
-                                    id: d.id, ...d.data(),
-                                    createdAt: d.data().createdAt?.toMillis?.() || Date.now()
-                                }));
-                                loading.value = false;
-                            }, () => loading.value = false);
-                        }
-                    });
-                });
+const addPost = async () => {
+if (!title.value) return;
 
-                const createPost = async () => {
-                    if (!newPost.value.title || !newPost.value.price) return;
-                    isSubmitting.value = true;
-                    try {
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'posts'), {
-                            ...newPost.value,
-                            price: Number(newPost.value.price),
-                            createdAt: serverTimestamp()
-                        });
-                        showPostModal.value = false;
-                        newPost.value = { title: '', price: '', location: '', category: 'Nhà ở' };
-                    } finally { isSubmitting.value = false; }
-                };
+await addDoc(collection(db, "posts"), {
+title: title.value,
+price: price.value
+});
 
-                const deletePost = async (id) => {
-                    if (confirm('Xóa tin này?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'posts', id));
-                };
+title.value = '';
+price.value = '';
+};
 
-                const filteredPosts = computed(() => {
-                    let res = posts.value;
-                    if (selectedCategory.value !== 'Tất cả') res = res.filter(p => p.category === selectedCategory.value);
-                    if (searchQuery.value) res = res.filter(p => p.title.toLowerCase().includes(searchQuery.value.toLowerCase()));
-                    return res.sort((a,b) => b.createdAt - a.createdAt);
-                });
+const del = async (id) => {
+await deleteDoc(doc(db, "posts", id));
+};
 
-                const timeAgo = (t) => {
-                    const s = Math.floor((Date.now() - t) / 1000);
-                    if (s < 60) return 'Vừa xong';
-                    if (s < 3600) return Math.floor(s/60) + 'p trước';
-                    return Math.floor(s/3600) + 'h trước';
-                };
+return { posts, title, price, addPost, del };
 
-                return { 
-                    posts, loading, isSubmitting, isOffline, searchQuery, selectedCategory,
-                    showPostModal, selectedPost, newPost, categories, isAdmin,
-                    createPost, deletePost, filteredPosts, timeAgo,
-                    formatPrice: (p) => new Intl.NumberFormat('vi-VN').format(p)
-                };
-            }
-        }).mount('#app');
-    </script>
+}
+}).mount("#app");
+</script>
+
 </body>
 </html>
